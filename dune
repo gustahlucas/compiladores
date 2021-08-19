@@ -1,0 +1,13 @@
+(executable
+ (name welcome)
+ (public_name welcome)
+ (modules welcome)
+ (libraries mylib))
+
+(cram
+ (deps %{bin:welcome}))
+
+(test
+ (name myalcotest)
+ (modules myalcotest)
+ (libraries alcotest mylib))

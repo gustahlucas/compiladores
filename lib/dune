@@ -1,0 +1,5 @@
+(library
+ (name mylib)
+ (libraries ptime ptime.clock.os)
+ (inline_tests)
+ (preprocess (pps ppx_expect)))
