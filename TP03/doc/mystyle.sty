@@ -1,0 +1,65 @@
+\NeedsTeXFormat{LaTeX2e}
+\ProvidesPackage{mystyle}[2020/08/31 v0.1 Miscelania for personal styling]
+
+% ----------------------------------------------------------------------
+% title of sections
+
+\@ifclassloaded{beamer}{}{
+  \RequirePackage[explicit]{titlesec}%
+
+  \newcommand*\chapterlabel{}
+  \titleformat{\chapter}
+    {\gdef\chapterlabel{}
+     \normalfont\sffamily\Huge\bfseries\scshape}
+    {\gdef\chapterlabel{\thechapter\ }}
+    {0pt}
+    {\begin{tikzpicture}[remember picture, overlay]
+      \node[yshift=-3cm] at (current page.north west)
+        {\begin{tikzpicture}[remember picture, overlay]
+          \draw[fill=LightSkyBlue] (0,0) rectangle (\paperwidth,3cm);
+          \node[anchor=east,
+                xshift=.9\paperwidth,
+                rectangle,
+                rounded corners=18pt,inner sep=11pt,
+                fill=MidnightBlue]
+                {\color{white}\chapterlabel#1};
+         \end{tikzpicture}
+        };
+     \end{tikzpicture}
+    }
+  \titlespacing*{\chapter}{0pt}{50pt}{0pt}
+
+  \usetikzlibrary{shapes.misc}
+
+  \newcommand\sectiontitlebar{%
+    \tikz[baseline,trim left=3.1cm,trim right=3cm] {
+      \fill [cyan!30] (2.5cm,-1ex) rectangle (\textwidth+3.1cm,2.5ex);
+      \node [
+          fill=cyan!60!white,
+          anchor= base east,
+          rounded rectangle,
+          minimum height=3.5ex] at (3cm,0) {
+          % \textbf{\arabic{chapter}.\thesection.}
+          \textbf{\thesection}
+      };
+    }%
+  }
+
+  \newcommand\subsectiontitlebar{%
+    \tikz[baseline,trim left=3.1cm,trim right=3cm] {
+      \fill [green!25] (2.5cm,-1ex) rectangle (\textwidth+3.1cm,2.5ex);
+      \node [
+          fill=green!50!white,
+          anchor= base east,
+          rounded rectangle,
+          minimum height=3.5ex] at (3cm,0) {
+          % \textbf{\arabic{chapter}.\thesection.}
+          \textbf{\thesubsection}
+      };
+    }%
+  }
+
+  \titleformat{\section}{\Large\bfseries}{\sectiontitlebar}{0.1cm}{#1}
+  \titleformat{\subsection}{\large\bfseries}{\subsectiontitlebar}{0.1cm}{#1}
+  % \renewcommand*{\thesection}{\arabic{section}}
+}

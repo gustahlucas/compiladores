@@ -1,0 +1,29 @@
+(library
+ (name compiler)
+ (wrapped false)
+ (libraries camomile)
+ (inline_tests)
+ (preprocess
+  (staged_pps
+    ppx_import
+    ppx_deriving.show
+    ppx_expect))
+ (flags
+  (:standard -warn-error -A)))
+
+(ocamllex
+ (modules lexer))
+
+(menhir
+ (modules parser)
+ (flags (
+   ;; token declarations in the grammar specification are translated
+   ;; into a definition of the token type
+   ; --only-tokens
+
+   --explain          ; explain conflicts in <basename>.conflicts
+   --dump             ; write an .automaton file
+   --reference-graph
+   --automaton-graph
+   --log-grammar 2    ; 
+)))
