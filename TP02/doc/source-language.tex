@@ -1,0 +1,577 @@
+\documentclass[a4paper,11pt,brazil]{article}
+
+\usepackage[left=25mm,top=15mm]{geometry}
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{babel}
+\usepackage{hyperref}
+\usepackage{lmodern}
+\usepackage{indentfirst}
+\usepackage{tabularx}
+\usepackage{graphics}
+\usepackage{float}
+\usepackage{newfloat}
+\usepackage{syntax}
+\usepackage{dirtree}
+\usepackage{pygmentex}
+\usepackage{tcolorbox}
+\usepackage{enumitem}
+\usepackage{tikz}
+\usepackage{tikz-qtree}
+\usepackage{mystyle}
+
+\DeclareFloatingEnvironment[name=Gramática]{gramatica}
+
+\setpygmented{boxing method=tcolorbox,lang=ocaml,tabsize=2}
+\efboxsetup{hidealllines,backgroundcolor=yellow!30}
+
+% syntax configuration
+\renewcommand{\syntleft}{\normalfont\slshape\hspace{0.25em}}
+\renewcommand{\syntright}{\hspace{0.25em}}
+\renewcommand{\ulitleft}{\normalfont\ttfamily\bfseries\frenchspacing\color{red}\hspace{0.25em}}
+\renewcommand{\ulitright}{\hspace{0.25em}}
+
+\usetikzlibrary{graphs,graphdrawing}
+\usegdlibrary{trees}
+
+\tikzset{
+  parser tree/.style={
+    % level/.style={sibling distance=130mm/#1},
+    % level distance=14mm,
+    sibling distance=0.6em,
+    % edge from parent fork down,
+    every internal node/.style={draw,rounded corners},
+    every leaf node/.style={fill=blue!10,rounded corners,very thin},
+    edge from parent/.style={draw},
+  },
+} 
+
+
+\renewcommand{\DTcomment}[1]{\hfill \sffamily #1}
+
+\newcommand{\lang}{\textsl{Trivia}}
+
+
+\begin{document}
+
+\begin{center}
+  \textbf{Construção de Compiladores I [BCC328]}
+\end{center}
+\begin{tcolorbox}[colback=yellow!20]
+  \begin{center}
+    \textbf{\Large Definição e implementação da linguagem \lang{}}\\[1em]
+  \end{center}
+\end{tcolorbox}
+\begin{center}
+  Departamento de Computação\par
+  Universidade Federal de Ouro Preto\par
+  Prof. José Romildo Malaquias\par
+  \today
+\end{center}
+
+\begin{abstract}
+  \lang{} é uma pequena linguagem de programação usada para fins
+  didáticos na aprendizagem de técnicas de construção de
+  compiladores.
+  
+  Na disciplina de construção de compiladores serão propostas
+  atividades de documentação e implementação de \lang{}.
+\end{abstract}
+
+\tableofcontents
+
+\section{A linguagem \lang{}}
+
+No livro
+\href{https://www.springer.com/gp/book/9783319669656}{Introduction to
+  Compiler Design}, Torben apresenta uma pequena linguagem de
+programação para fins didáticos. Nesta disciplina vamos considerar uma
+linguagem semelhante, que chamaremos de \lang{}, baseada na linguagem
+apresentada no livro, porém com algumas diferenças sintáticas e
+semânticas.
+\begin{center}
+  \includegraphics[width=.4\textwidth]{trivia.png}
+\end{center}
+
+\lang{} é uma linguagem de programação bastante simples que será usada
+para a prática de técnicas usadas na implementação de compiladores.
+
+As construções da linguagem serão detalhadas no decorrer do
+curso. Começaremos com uma versão básica, e oportunamente serão
+apresentadas versões mais aprimoradas, com novas construções.
+
+\lang{} é uma \textbf{linguagem funcional de primeira ordem} com
+definições recursivas e tipagem estática. A sintaxe é apresentada na
+gramática~\ref{grm:trivial}.
+
+\begin{gramatica}
+  \begin{synshorts}
+    \begin{mdframed}
+    \begin{tabular}{r@{$\;\rightarrow\;$}l>{\bfseries}r}
+      <Program> & <Funs>                               & programa                \\[.9em]
+      <Funs>    & <Fun>                                &                         \\
+      <Funs>    & <Fun> <Funs>                         &                         \\[.9em]
+      <Fun>     & <TypeId> "(" <TypeIds> ")" "=" <Exp> & declaração de função    \\[.9em]
+      <TypeId>  & "int" "id"                           & tipo e identificador    \\
+      <TypeId>  & "bool" "id"                          &                         \\[.9em]
+      <TypeIds> & <TypeId>                             & lista de parâmetros     \\
+      <TypeIds> & <TypeId> "," <TypeIds>               &                         \\[.9em]
+      <Exp>     & "num"                                & literal inteiro         \\
+      <Exp>     & "id"                                 & variável                \\
+      <Exp>     & <Exp> "+" <Exp>                      & operações aritméticas   \\
+      <Exp>     & <Exp> "<" <Exp>                      & operações relacionais   \\
+      <Exp>     & "if" <Exp> "then" <Exp> "else" <Exp> & expressão condicional   \\
+      <Exp>     & "id" "(" <Exps> ")"                  & chamada de função       \\
+      <Exp>     & "let" "id" "=" <Exp> "in" <Exp>      & expressão de declaração \\[.9em]
+      <Exps>    & <Exp>                                & lista de argumentos     \\
+      <Exps>    & <Exp> "," <Exps>                     &                         \\
+    \end{tabular}
+    \end{mdframed}
+  \end{synshorts}
+  \caption{Linguagem \lang{}}
+  \label{grm:trivial}
+\end{gramatica}
+
+Esta gramática é claramente \textbf{ambígua}, como ilustra as figuras
+\ref{fig:ast.op}, \ref{fig:ast.if}, e \ref{fig:ast.let}. As
+ambiguidades podem são resolvidas observando
+\begin{itemize}
+  \item uma definição de \textbf{precedência} relativa e
+  \textbf{associatividade} para dos operadores, indicadas pela
+  tabela~\ref{tab:prec}, em ordem decrescente de precedência, e
+  
+  \item que as expressões condicionais e de declaração de variável se
+  estendem ao máximo para a direita.
+\end{itemize}
+
+\begin{figure}
+  \begin{center}
+    \tikz[parser tree] \Tree
+    [.E
+      [.E [.E 2 ] + [.E 3 ] ]
+      <
+      [.E 4 ] ];
+    \hfil
+    \tikz[parser tree] \Tree
+    [.E
+      [.E 2 ]
+      +
+      [.E [.E 3 ] < [.E 4 ] ] ];
+  \end{center}
+  \caption{Árvores sintáticas para a cadeia \texttt{2 + 3 < 4}}
+  \label{fig:ast.op}
+\end{figure}
+
+\begin{figure}
+  \begin{center}
+    \tikz[parser tree] \Tree
+    [.E if [.E x ] then [.E 2 ] else [.E [.E 3 ] + [.E 4 ] ] ];
+    \hfil
+    \tikz[parser tree] \Tree
+    [.E
+      [.E if [.E x ] then [.E 2 ] else [.E 3 ] ]
+      +
+      [.E 4 ] ];
+  \end{center}
+  \caption{Árvores sintáticas para a cadeia \texttt{if x then 2 else 3 + 4}}
+  \label{fig:ast.if}
+\end{figure}
+
+\begin{figure}
+  \begin{center}
+    \tikz [parser tree] \Tree
+    [.E let x = [.E 2 ] in [.E [.E x ] > [.E 3 ] ] ];
+    \hfil
+    \tikz [parser tree] \Tree
+    [.E
+      [.E let x = [.E 2 ] in [.E x ] ]
+      >
+      [.E 3 ] ] ;
+  \end{center}
+  \caption{Árvores sintáticas para a cadeia \texttt{let x = 2 in x < 3}}
+  \label{fig:ast.let}
+\end{figure}
+
+
+\begin{table}[!htb]
+  \centering
+  \begin{tabular}{|l|l|}\hline
+    \textbf{operadores} & \textbf{associatividade} \\\hline
+    \texttt{+}          & esquerda                 \\\hline
+    \texttt{<}          & -                        \\\hline
+  \end{tabular}
+  \caption{Precedência e associatividade dos operadores}
+  \label{tab:prec}
+\end{table}
+
+Um \textbf{programa} em \lang{} é uma lista de declarações de
+\textbf{funções}. As funções são \textbf{mutuamente recursivas}, e
+nenhuma função pode ser declarada mais de uma vez. Cada função declara
+o tipo do seu resultado e o tipo e o nome de seus parâmetros
+formais. Não pode haver repetição de nome na lista de parâmetros de
+uma função. Funções e variáveis têm espaços de nome separados. O corpo
+de uma função é uma \textbf{expressão}.
+
+Os \textbf{tipos} de \lang{} são \texttt{int} (inteiro) e
+\texttt{bool} (booleano).
+
+Uma \textbf{expressão} pode ser:
+\begin{itemize}[noitemsep]
+  \item uma constante inteira
+  \item uma variável
+  \item uma operação aritmética
+  \item uma operação relacional
+  \item uma expressão condicional
+  \item uma chamada de função
+  \item uma expressão com uma declaração local
+\end{itemize}
+
+Comparações são definidas para inteiros e para booleanos (sendo
+\emph{falso} considerado menor que \emph{verdadeiro}). Mas operações
+aritméticas são definidas apenas para inteiros.
+
+Um programa deve conter uma função chamada \texttt{main}, com um
+parâmetro inteiro e que retorna um inteiro. Um programa é executado
+pela chamada desta função com um argumento, que deve ser inteiro. O
+resultado desta função é a saída do programa.
+
+Ocorrências de \textbf{caracteres brancos} (espaço, tabulação
+horizontal, nova linha) entre os símbolos léxicos são ignorados.
+
+Os \textbf{literais inteiros} são formados por uma sequência de um ou
+mais dígitos decimais. Não há literais inteiros negativos. São
+exemplos de literais inteiros:
+\begin{pygmented}[lang=text]
+2014
+872834
+0
+0932
+\end{pygmented}
+
+\textbf{Identificadores} são sequências de letras maiúsculas ou
+minúsculas, dígitos decimais e sublinhados (\texttt{\_}), começando
+com uma letra. Letras maiúsculas e minúsculas são distintas em um
+identificador. Identificadores são usados para nomear entidades usadas
+em um programa, como funções e variáveis. São exemplos de
+identificadores:
+\begin{pygmented}[lang=text]
+peso
+idadeAluno
+alfa34
+primeiro_nome
+\end{pygmented}
+
+Não são exemplos de identificadores:
+\begin{pygmented}[lang=text]
+__peso
+idade do aluno
+34rua
+primeiro-nome
+x'
+\end{pygmented}
+
+\textbf{Palavras-chave}, usadas em algumas construções sintáticas da
+linguagem, são reservadas, isto é, não podem ser usadas como
+identificadores.
+
+Exemplo de programa em \lang{}:
+\begin{pygmented}[lang=text]
+int f(int a, int b) =
+  let y = a + b
+  in
+    if a < b then
+      f(sucessor(a), b) + y
+    else
+      y + y
+
+int sucessor(int n) =
+  n + 1
+
+int main(int x) =
+  f(x, 10)
+\end{pygmented}
+
+\section{O projeto}
+
+\subsection{Estrutura do projeto}
+
+O projeto será desenvolvido na linguagem OCaml usando a ferramenta
+dune para automatização da compilação. O projeto usa algumas
+ferramentas e bibliotecas externas, entre as quais citamos:
+\begin{description}
+  \item[ocamllex] Ocamllex é um gerador de analisador léxico. Ele
+  produz analisadores léxicos (em OCaml) a partir de conjuntos de
+  expressões regulares com ações semânticas associadas. É distribuído
+  junto com o compilador de OCaml.
+  
+  \item[menhir] Menhir é um gerador de analisador sintático. Ele
+  transforma especificações gramaticais de alto nível, decoradas com
+  ações semânticas expressas na linguagem de programação OCaml, em
+  analisadores sintáticos, também expressos em OCaml.
+
+  \item[dune] Dune é um sistema de compilação para OCaml.
+
+  \item[ppx_import] É uma extensão de sintaxe que permite extrair
+  tipos ou assinaturas de outros arquivos de interface compilados
+
+  \item[ppx_deriving] É uma extensão de sintaxe que facilita geração
+  de código baseada em tipos, em OCaml
+
+  \item[ppx_expect] É uma extensão de sintaxe para escrita de testes
+  inline de expectataiva, em OCaml
+
+  \item[camomile] Camomile é uma biblioteca unicode para OCaml.  
+\end{description}
+  
+O código é organizado segundo a estrutura de diretórios mostrada na
+figura~\ref{fig:dir}.
+\begin{figure}[H]
+  \begin{tcolorbox}
+    \dirtree{%
+      .1 \lang{}.
+      .2 src\DTcomment{código fonte do projeto}.
+      .3 lib\DTcomment{biblioteca com as principais definições usadas para montar o compilador}.
+      .3 driver\DTcomment{driver do compilador}.
+      .2 doc\DTcomment{Documentação de \lang{}}.
+    }
+  \end{tcolorbox}
+  \caption{Estrutura de diretórios do projeto do compilador}
+  \label{fig:dir}
+\end{figure}
+Existem outros diretórios gerados automaticamente que não são
+relevantes nesta discussão e por isto não foram mencionados. Caso
+algum ambiente de desenvolvimento integrado (IDE) seja usado,
+provavelmente haverá alguns arquivos e diretórios específicos do
+ambiente e que também não são mencionados.
+
+Os arquivos \texttt{src/lib/dune} e \texttt{src/driver/dune} contém as
+especificações do projeto esperadas pelo dune. Neles são indicadas
+informações como nome do projeto, dependências externas e flags
+necessários para a compilação da biblioteca e da aplicação.
+
+\subsection{Módulos importantes}
+
+Alguns módulos importantes no projeto são mencionados a seguir. Alguns
+já estão prontos, e outros deverão ser criados ou modificados pelo
+participante nas atividades do curso.
+
+\begin{itemize}
+  \item O módulo \pyginline|Absyn| contém os tipos que representam as
+  árvores sintáticas abstratas para as construções da linguagem fonte.
+
+  \item O módulo \pyginline|Absyntree| contém funções para converter
+  árvores de sintaxe abstratas para árvores genéricas de strings,
+  úteis para visualização das árvores sintáticas durante o
+  desenvolvimento do compilador.
+
+  \item O módulo \pyginline|Lexer| contém as declarações relacionadas
+  com o analisador léxico do compilador.
+
+  O analisador léxico (módulo \pyginline|Lexer|) é gerado
+  automaticamente pelo \texttt{ocamllex}. A especificação léxica é
+  feita no arquivo \texttt{src/lib/lexer.mll} usando expressões
+  regulares.
+
+  \item O módulo \pyginline|Parser| contém as declarações relacioandas
+  com o analisador sintático do compilador.
+
+  O analisador sintático (módulo \pyginline|Parser|) é gerado
+  automaticamente pelo \texttt{menhir}. A especificação sintática é
+  feita no arquivo \texttt{src/lib/parser.mly} usando uma gramática
+  livre de contexto.
+  
+  \item O módulo \pyginline|Semantic| contém declarações usadas na
+  análise semântica e geração de código do compilador.
+
+  \item O módulo \pyginline|Symbol| contém declarações que implementam
+  um tipo usado para representar nomes de identificadores de forma
+  eficiente, e será discutido posteriormente.
+
+  \item O módulo \pyginline|Env| contém declarações para a manipulação
+  dos ambientes de compilação (às vezes também chamados de
+  contexto). Estes ambientes são representados usando tabelas de
+  símbolos.
+
+  \item O módulo \pyginline|Types| contém declarações para a
+  representação interna dos tipos da linguagem fonte.
+
+  \item O módulo \pyginline|Error| contém declarações usadas para
+  reportar errors detectados pelo compilador durante a compilação.
+
+  \item O módulo \pyginline|Location| contém declarações usadas para
+  representação de localizações de erros no código fonte, importantes
+  quando os erros forem reportados.
+
+  \item O módulo \pyginline|Driver| é formado por declarações,
+  incluindo a função \pyginline|main|, ponto de entrada para a
+  execução do compilador.
+\end{itemize}
+
+\subsection{Implementando uma nova construçao de \lang{}}
+
+Ao acrescentar uma nova construção na implementação da linguagem,
+procure seguir os seguintes passos:
+\begin{itemize}
+  \item Se necessário defina um novo construtor de dados no tipo
+  \pyginline|Types.t| para representar algum tipo da linguagem \lang{}
+  que ainda não faça parte do projeto. \textit{[Análise semântica]}
+
+  \item Se necessário acrecente ao ambiente inicial (no módulo
+  \pyginline|Env|) a representação de quaisquer novos tipos, variáveis
+  ou funções que façam parte da biblioteca padrão de
+  \lang{}. \textit{[Análise semântica]}
+
+  \item Defina os novos construtores de dados necessárias para
+  representar a árvore abstrata para a construção no tipo
+  \pyginline|Absyn.t|.
+  \begin{itemize}[noitemsep]
+    \item definir os campos necessários para as sub-árvores da árvore
+    abstrata, se houver
+    \item extender as funções do \pyginline|Absyntree| para permitir a
+    conversão para uma árvore de strings, útil para visualização
+    gráfica da árvore abstrata.
+  \end{itemize}
+  \textit{[Análise sintática]}
+
+  \item Extenda a função de análise semântica
+  \pyginline|Semantic.semantic| para verificar a nova
+  construção. \textit{[Análise semântica]}
+
+  \item Declare quaisquer novos símbolos terminais e não-terminais na
+  gramática livre de contexto da linguagem que se fizerem necessários
+  para as especificações léxica e sintática da
+  construção. \textit{[Análises léxica e sintática]}
+
+  \item Acrescente as regras de produção para a construção na
+  gramática livre de contexto da linguagem, tomando o cuidado de
+  escrever ações semânticas adequadas para a construção da árvore
+  abstrata correspondente. Se necessário use declarações de
+  precedência de operadores. \textit{[Análise sintática]}
+
+  \item Se necessário acrescente regras léxicas que permitam
+  reconhecer os novos símbolos terminais da especificação léxica da
+  linguagem. \textit{[Análise léxica]}
+\end{itemize}
+
+\section{Mensagens de erro}
+
+O projeto contém algumas funções para \textbf{reportar erros}
+encontrados durante a compilação. Estas funções fazem parte do módulo
+\pyginline|Error| e serão comentadas a seguir.
+
+Em todo compilador é desejável que os erros encontrados sejam
+reportados com uma indicação da \textbf{localização} do erro,
+acompanhada por uma \textbf{mensagem} explicativa do problema
+ocorrido. Para tanto torna-se necessário guardar a informação da
+localização em que cada frase do programa (o que corresponde a cada nó
+da árvore abstrata construída para representar o programa) foi
+encontrada. O módulo \pyginline|Location| contém algumas definições
+relacionadas com estas localizações.
+
+Neste projeto as localizações no código fonte são representadas pelo
+tipo \pyginline|Location.t|, que leva em consideração as posições no
+código fonte onde a frase começou e terminou.
+
+Cada uma destas posições é do tipo \pyginline|Lexing.position|. O
+módulo \pyginline|Lexing| faz parte da biblioteca padrão do OCaml e
+será extensivamente usado nas implementações dos analisadores léxico e
+sintático. O tipo \pyginline|Lexing.position| contém as seguintes
+informações:
+\begin{itemize}[noitemsep]
+  \item a indicação da unidade (arquivo fonte) sendo compilada,
+  \item o número da linha, e
+  \item o número da coluna
+\end{itemize}
+
+A \textbf{função} \pyginline|Error.error|, e outras funções similares
+encontradas no módulo \pyginline|Error|, devem ser usadas para emissão
+de mensagens de erro. Esta função recebe como argumentos a localização
+do erro, a mensagem de formatação de diagnóstico, e possivelmente
+argumentos complementares de acordo com a mensagem de formatação.
+
+
+\section{Símbolos}
+
+Linguagens de programação usam \textbf{identificadores} para nomear
+entidades da linguagem, como tipos, variáveis, funções, classes,
+módulos, etc.
+
+\textbf{Símbolos léxicos} (também chamados de \textbf{símbolos
+  terminais} ou \emph{\textbf{tokens}}) que são classificados como
+identificadores têm um valor semântico (atributo) que é o nome do
+identificador. A princípio o valor semântico de um identificador pode
+ser representado por uma cadeia de caracteres (tipo \pyginline|string|
+do OCaml). Porém o tipo \pyginline|string| tem algumas incoveniências
+para o compilador:
+\begin{itemize}
+  \item Geralmente o mesmo identificador ocorre várias vezes em um
+  programa. Se cada ocorrência for representada por uma string (ou
+  seja, por uma sequência de caracteres), o uso de memória poderá ser
+  grande.
+
+  \item Normalmente existem dois tipos de ocorrência de
+  identificadores em um programa:
+  \begin{itemize}
+    \item uma declaração do identificador, e
+    \item um ou mais usos do identificador já declarado.
+  \end{itemize}
+  Durante a compilação cada ocorrência de uso de um identificador deve
+  ser associada com uma ocorrência de declaração. Para tanto os
+  identificadores devem ser comparados para determinar se são iguais
+  (isto é, se tem o mesmo nome). O uso de strings é ineficiente, pois
+  pode ser necessário comparar todos os caracteres das strings para
+  determinar se elas são iguais ou não.
+\end{itemize}
+
+Por estas razões o compilador utiliza o tipo \pyginline|Symbol.symbol|
+para representar os nomes dos identificadores. Basicamente usa-se uma
+tabela \emph{hash} onde os identificadores são colocados à medida que
+eles são encontrados. Sempre que o analisador léxico encontrar um
+identificador, deve-se verificar se o seu nome já está na tabela. Em
+caso afirmativo, usa-se o símbolo correspondente que já se encontra na
+tabela. Caso contrário cria-se um novo símbolo, que é adicionado à
+tabela associado ao nome encontrado, e este novo símbolo é usado pelo
+analisador léxico como valor semântico do \emph{token}.
+
+Na implementação de \pyginline|Symbol.symbol| associa-se a cada novo
+símbolo um número inteiro diferente. A comparação de igualdade de
+símbolos se resume a uma comparação (muito eficiente) de inteiros, já
+que o mesmo identificador estará sempre sendo representado pelo mesmo
+símbolo (associado portanto ao mesmo número inteiro).
+
+A função \pyginline|Symbol.symbol| cria um símbolo a partir de uma
+string, e a função \pyginline|Symbol.name| obtém o nome de um símbolo
+dado.
+
+
+\section{O  analisador léxico}
+
+O módulo \pyginline|Lexer| contém as declarações que implementam o
+analisador léxico do compilador. Este módulo será gerado
+automaticamente pela ferramenta \texttt{ocamllex}.
+
+A especificação da estrutura léxica da linguagem fonte é feita no
+arquivo \texttt{src/lib/lexer.mll} usando \textbf{expressões
+  regulares}. Consulte a
+\href{https://ocaml.org/releases/4.12/htmlman/lexyacc.html}{documentação
+  do \texttt{ocamllex}} para entender como fazer a especificação
+léxica.
+
+Os analisadores léxico e sintático vão se comunicar durante a
+compilação, pois os tokens obtidos pelo analisador léxico serão
+consumidos pelo analisador sintático. Ou seja, os tokens são os
+símbolos terminais da gramática usada pelo gerador de analisador
+sintático. Para manter a consistência dos analisadores léxico e
+sintático \emph{os símbolos terminais (tokens) são declarados na
+  gramática livre de contexto} do \texttt{menhir}, no arquivo
+\texttt{src/lib/parser.mly}. Consulte a documentação do
+\texttt{menhir} para entender como escrever a gramática livre de
+contexto.
+
+
+
+\end{document}
+
+% Local Variables:
+% ispell-local-dictionary: "brazilian"
+% End:
